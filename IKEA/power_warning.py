@@ -1,9 +1,9 @@
 import dirigera
 import sys
 import json
-from typing import Any
+from typing import Any, Dict, Deque, Tuple
 from datetime import datetime, timedelta
-from collections import deque
+from collections import deque, Counter
 
 if len(sys.argv) != 3:
     print("Usage: python power_warning.py <IP_ADDRESS> <TOKEN>")
@@ -24,28 +24,31 @@ RETENTION_HOURS = 4
 POWER_THRESHOLD = 0.01  # Amps
 MAX_ENGAGEMENTS_PER_HOUR = 5
 
-def cleanup_old_events():
+def cleanup_old_events() -> None:
     """Remove events older than RETENTION_HOURS"""
     cutoff_time = datetime.now() - timedelta(hours=RETENTION_HOURS)
     while power_events and power_events[0][1] < cutoff_time:
         power_events.popleft()
 
-def check_excessive_engagements():
+def check_excessive_engagements(events: Deque[Tuple[str, datetime, float, bool]]) -> Dict[str, int]:
     """
     Check for each device if the number of times it has been switched on per hour
     has exceeded MAX_ENGAGEMENTS_PER_HOUR.
+    
+    Args:
+        events: Deque of power events (device_id, timestamp, current_amps, is_on)
     
     Returns:
         dict: Dictionary mapping device_id to count of on-switches for devices 
               that exceeded the threshold
     """
     one_hour_ago = datetime.now() - timedelta(hours=1)
-    device_on_counts = {}
     
     # Count "on" events (is_on=True) per device in the last hour
-    for device_id, timestamp, current_amps, is_on in power_events:
-        if timestamp >= one_hour_ago and is_on:
-            device_on_counts[device_id] = device_on_counts.get(device_id, 0) + 1
+    device_on_counts = Counter(
+        device_id for device_id, timestamp, current_amps, is_on in events
+        if timestamp >= one_hour_ago and is_on
+    )
     
     # Filter devices that exceeded the threshold
     excessive_devices = {
@@ -56,7 +59,7 @@ def check_excessive_engagements():
     
     return excessive_devices
 
-def on_message(ws: Any, message: str):
+def on_message(ws: Any, message: str) -> None:
     message_dict = json.loads(message)
     data = message_dict["data"]
     if (message_dict["type"] != "deviceStateChanged" or data["deviceType"] != "outlet"):
@@ -82,12 +85,12 @@ def on_message(ws: Any, message: str):
     else:
         print(f"Outlet {id} is OFF, AMP is {current_amps} at {timestamp}")
         
-    excessive = check_excessive_engagements()
+    excessive = check_excessive_engagements(power_events)
     if excessive:
         for device_id, count in excessive.items():
             print(f"Warning: Device {device_id} switched on {count} times in the last hour")
 
-def on_error(ws: Any, message: str):
+def on_error(ws: Any, message: str) -> None:
     print(f"ERROR:{message}")
 
 dirigera_hub.create_event_listener(
