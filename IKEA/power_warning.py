@@ -1,9 +1,10 @@
 import dirigera
 import sys
 import json
-from typing import Any, Dict, Deque, Tuple
+from typing import Any, Dict, Deque
 from datetime import datetime, timedelta
 from collections import deque, Counter
+from dataclasses import dataclass
 
 if len(sys.argv) != 3:
     print("Usage: python power_warning.py <IP_ADDRESS> <TOKEN>")
@@ -17,9 +18,17 @@ dirigera_hub = dirigera.Hub(
     ip_address=ip_address
 )
 
-# Global list to store power events (device_id, timestamp, current_amps, is_on)
+@dataclass
+class PowerEvent:
+    """Represents a power state change event for a device"""
+    device_id: str
+    timestamp: datetime
+    current_amps: float
+    is_on: bool
+
+# Global list to store power events
 # Using deque for efficient removal of old entries
-power_events = deque()
+power_events: Deque[PowerEvent] = deque()
 RETENTION_HOURS = 4
 POWER_THRESHOLD = 0.01  # Amps
 MAX_ENGAGEMENTS_PER_HOUR = 5
@@ -27,16 +36,16 @@ MAX_ENGAGEMENTS_PER_HOUR = 5
 def cleanup_old_events() -> None:
     """Remove events older than RETENTION_HOURS"""
     cutoff_time = datetime.now() - timedelta(hours=RETENTION_HOURS)
-    while power_events and power_events[0][1] < cutoff_time:
+    while power_events and power_events[0].timestamp < cutoff_time:
         power_events.popleft()
 
-def check_excessive_engagements(events: Deque[Tuple[str, datetime, float, bool]]) -> Dict[str, int]:
+def check_excessive_engagements(events: Deque[PowerEvent]) -> Dict[str, int]:
     """
     Check for each device if the number of times it has been switched on per hour
     has exceeded MAX_ENGAGEMENTS_PER_HOUR.
     
     Args:
-        events: Deque of power events (device_id, timestamp, current_amps, is_on)
+        events: Deque of PowerEvent objects
     
     Returns:
         dict: Dictionary mapping device_id to count of on-switches for devices 
@@ -46,8 +55,8 @@ def check_excessive_engagements(events: Deque[Tuple[str, datetime, float, bool]]
     
     # Count "on" events (is_on=True) per device in the last hour
     device_on_counts = Counter(
-        device_id for device_id, timestamp, current_amps, is_on in events
-        if timestamp >= one_hour_ago and is_on
+        event.device_id for event in events
+        if event.timestamp >= one_hour_ago and event.is_on
     )
     
     # Filter devices that exceeded the threshold
@@ -77,7 +86,13 @@ def on_message(ws: Any, message: str) -> None:
     is_on = current_amps > threshold
     
     # Add event to global list
-    power_events.append((id, timestamp, current_amps, is_on))
+    event = PowerEvent(
+        device_id=id,
+        timestamp=timestamp,
+        current_amps=current_amps,
+        is_on=is_on
+    )
+    power_events.append(event)
     cleanup_old_events()
     
     if is_on:
