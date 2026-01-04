@@ -15,6 +15,26 @@ I Used an IKEA water sensor to turn off an IKEA smart plug. However, I need a fi
 
 I can use a smart plug to monitor the power consumption of the water pump. If it runs too often, I can send a notification. I can use an IKEA smart plug to experiment with this idea.
 
+Using the `events_listener.py` script in the `IKEA` folder, I can listen for events from the IKEA Dirigera hub.
+
+This event is sent when the load of the smart plug changes:
+
+```python
+ {
+    'id': '37fd72f2-de40-4b61-803b-8b6914d403a7_1', 
+    'type': 'outlet', 
+    'deviceType': 'outlet', 
+    'createdAt': '2026-01-03T17:14:19.000Z', 
+    'isReachable': True, 
+    'lastSeen': '2026-01-04T21:23:34.000Z', 
+    'attributes': {
+        'currentAmps': 0.004999999888241291
+    }, 
+    'remoteLinks': []
+}
+```
+
+
 ## Getting started
 
 I use [Leggin/dirigera python library](https://github.com/Leggin/dirigera) to control IKEA Dirigera devices.
